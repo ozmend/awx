@@ -1,0 +1,107 @@
+version: '3.5'
+services:
+
+  web:
+    image: ansible/awx_web
+    container_name: awx_web
+    env_file:
+      - "./.env"
+    environment:
+      - "TZ=Europe/Istanbul"
+    depends_on:
+      - rabbitmq
+      - memcached
+    labels:
+      - "traefik.enable=true"
+      - "traefik.backend=awx"
+      - "traefik.port=8052"
+      - "traefik.frontend.rule=Host:awx.teidom.local"
+      - "traefik.frontend.headers.SSLRedirect=true"
+      - "traefik.docker.network=web"
+    hostname: awx_web
+    external_links:
+      - postgresdb
+    user: root
+    networks:
+      - awx
+      - web
+      - postgresql_postgres
+    restart: unless-stopped
+    volumes:
+      - "./SECRET_KEY:/etc/tower/SECRET_KEY:ro"
+      - "./environment.sh:/etc/tower/conf.d/environment.sh"
+      - "./credentials.py:/etc/tower/conf.d/credentials.py"
+      - "./nginx.conf:/etc/nginx/nginx.conf:ro"
+      - "projects:/var/lib/awx/projects"
+  task:
+    image: ansible/awx_task
+    container_name: awx_task
+    depends_on:
+      - rabbitmq
+      - memcached
+      - web
+    external_links:
+      - postgresdb
+    hostname: awx
+    user: root
+    restart: unless-stopped
+    volumes:
+      - "./SECRET_KEY:/etc/tower/SECRET_KEY:ro"
+      - "./environment.sh:/etc/tower/conf.d/environment.sh"
+      - "./credentials.py:/etc/tower/conf.d/credentials.py"
+      - "projects:/var/lib/awx/projects"
+#      - "/docker/awx/ca-trust:/etc/pki/ca-trust/source/anchors:ro"
+    env_file:
+      - "./.env"
+    environment:
+      - "TZ=Europe/Istanbul"
+      - "DATABASE_USER=${DATABASE_USER}"
+      - "DATABASE_NAME=${DATABASE_NAME}"
+      - "DATABASE_HOST=${DATABASE_HOST}"
+      - "DATABASE_PORT=${DATABASE_PORT}"
+      - "DATABASE_PASSWORD=${DATABASE_PASSWORD}"
+      - "MEMCACHED_HOST=${MEMCACHED_HOST}"
+      - "RABBITMQ_HOST=${RABBITMQ_HOST}"
+      - "AWX_ADMIN_USER=${AWX_ADMIN_USER}"
+      - "AWX_ADMIN_PASSWORD=${AWX_ADMIN_PASSWORD}"
+    networks:
+      - awx
+      - postgresql_postgres
+  
+  rabbitmq:
+    image: ansible/awx_rabbitmq
+    container_name: awx_rabbitmq
+    hostname: rabbitmq
+    restart: unless-stopped
+    env_file:
+      - "./.env"
+    environment:
+     - "TZ=Europe/Istanbul"
+     - "RABBITMQ_DEFAULT_VHOST=${RABBITMQ_DEFAULT_VHOST}"
+     - "RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}"
+     - "RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}"
+     - "RABBITMQ_ERLANG_COOKIE=${RABBITMQ_ERLANG_COOKIE}"
+    networks:
+      - awx
+
+  memcached:
+    image: memcached:alpine
+    container_name: awx_memcached
+    hostname: memcached
+    restart: unless-stopped
+    env_file:
+      - "./.env"
+    environment:
+     - "TZ=Europe/Istanbul"
+    networks:
+      - awx
+
+volumes:
+   projects: {}
+
+networks:
+   awx:
+   web:
+      external: true
+   postgresql_postgres:
+      external: true
